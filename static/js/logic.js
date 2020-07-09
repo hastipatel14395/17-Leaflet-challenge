@@ -1,157 +1,144 @@
-// Function to determine marker size based on earthquake magnitude
-function markerSize(feature) {
-  return Math.sqrt(Math.abs(feature.properties.mag)) * 5;
-}
+// Store our API endpoint
+var earthquakeUrl = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/1.0_month.geojson";
+var platesUrl = "https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json";
 
-// Function to determine marker color based on earthquake magnitude
-var colors = ["#7FFF00", "#dfedbe", "#eede9f", "#FF8C00", "	#FA8072", "#FF0000"]
-function fillColor(feature) {
-  var mag = feature.properties.mag;
-  if (mag <= 1) {
-    return colors[0]
-  }
-  else if (mag <= 2) {
-    return colors[1]
-  }
-  else if (mag <= 3) {
-    return colors[2]
-  }
-  else if (mag <= 4) {
-    return colors[3]
-  }
-  else if (mag <= 5) {
-    return colors[4]
-  }
-  else {
-    return colors[5]
-  }
-}
-
-// Base layers for maps (no data yet)
-var attribution = "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>";
-
-var satelliteMap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
-  attribution: attribution,
-  maxZoom: 18,
-  id: "mapbox.satellite",
-  accessToken: API_KEY
-});
-
-var lightMap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
-  attribution: attribution,
-  maxZoom: 18,
-  id: "mapbox.light",
-  accessToken: API_KEY
-});
-
-var outdoorsMap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
-  attribution: attribution,
-  maxZoom: 18,
-  id: "mapbox.outdoors",
-  accessToken: API_KEY
-});
-
-// Create a baseMaps object
-var baseMaps = {
-  "Satellite": satelliteMap,
-  "Grayscale": lightMap,
-  "Outdoors": outdoorsMap
-};
-
-// Store API endpoint as queryUrl
-var queryUrl = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson";
-
-var platesPath = "GeoJSON/PB2002_boundaries.json";
-
-// Perform a GET request to the query URL
-d3.json(queryUrl, function(data) {
-    d3.json(platesPath, function(platesData) {
-  
-      // console.log(data.features);
-      console.log(platesData);
-
-          // Earthquake layer
-    var earthquakes = L.geoJSON(data, {
-
-        // Create circle markers
-        pointToLayer: function (feature, latlng) {
-          var geojsonMarkerOptions = {
-            radius: 8,
-            stroke: false,
-            //fillColor: "#ff7800",
-            radius: markerSize(feature),
-            fillColor: fillColor(feature),
-            //color: "white",
-            weight: 5,
-            opacity: .8,
-            fillOpacity: .8
-          };
-          return L.circleMarker(latlng, geojsonMarkerOptions);
-        },
-  
-        // Create popups
-        onEachFeature: function (feature, layer) {
-          return layer.bindPopup(`<strong>Place:</strong> ${feature.properties.place}<br><strong>Magnitude:</strong> ${feature.properties.mag}`);
-        }
-      });
-
-          // Tectonic plates layer
-    var platesStyle = {
-        "color": "white",
-        "weight": 2,
-        "opacity": 1,
-        fillOpacity: 0,
-      };
-      var plates = L.geoJSON(platesData, {
-        style: platesStyle
-      });
-  
-      // Create an overlay object
-      var overlayMaps = {
-        "Fault lines": plates,
-        "Earthquakes": earthquakes,
-      };
-  
-      // Define a map object
-      var map = L.map("map", {
-        center: [37.09, -95.71],
-        zoom: 3,
-        layers: [satelliteMap, plates, earthquakes]
-      });
-  
-      // Add the layer control to the map
-      L.control.layers(baseMaps, overlayMaps, {
-        collapsed: false
-      }).addTo(map);
-  
-      // Setting up the legend
-      var legend = L.control({ position: "bottomright" });
-      legend.onAdd = function() {
-        var div = L.DomUtil.create("div", "info legend");
-        var limits = ["0-1", "1-2", "2-3", "3-4", "4-5", "5+"];
-        var labelsColor = [];
-        var labelsText = [];
-  
-        // Add min & max
-        limits.forEach(function(limit, index) {
-          labelsColor.push(`<li style="background-color: ${colors[index]};"></li>`); // <span class="legend-label">${limits[index]}</span>
-          labelsText.push(`<span class="legend-label">${limits[index]}</span>`)
-        });
-  
-        var labelsColorHtml =  "<ul>" + labelsColor.join("") + "</ul>";
-        var labelsTextHtml = `<div id="labels-text">${labelsText.join("<br>")}</div>`;
-  
-        var legendInfo = "<h4>Earthquake<br>Magnitude</h4>" +
-          "<div class=\"labels\">" + labelsColorHtml + labelsTextHtml
-          "</div>";
-        div.innerHTML = legendInfo;
-  
-        return div;
-      };
-  
-      // Adding legend to the map
-      legend.addTo(map);
-  
-    })
+// Perform a GET request to above Earthquake and Fraxen url queries
+d3.json(earthquakeUrl, function(data) {
+  d3.json(platesUrl, function(data2) {
+    // Send the data.features object to the createFeatures function
+    createFeatures(data.features, data2.features);
   })
+});
 
+// Function to set color of the earthquakes based on their magnitudes
+function getColor(d) {
+  return d > 6 ? "red" :
+         d > 5 ? "purple" :
+         d > 4  ? "orange" :
+         d > 3  ? "gold" :
+         d > 2  ? "yellow" :
+         d > 1  ? "greenyellow" :
+                  "grey";
+}
+
+// Function to set circle size by earthquake magnitudes
+function getRadius(magnitude) {
+  return magnitude * 20000;
+}
+
+// Function to create and utilize features
+function createFeatures(earthquakeData, plateData) {
+
+  // Function to run once to render each feature in earthquake data
+  // Give each earthquake a popup describing the occurance location and time
+  function onEachEarthquake(feature, layer) {
+    layer.bindPopup("<h4>" + feature.properties.place +
+      "<br>Magnitude: " + feature.properties.mag + 
+      "</h4><hr><p>" + new Date(feature.properties.time) + "</p>");
+  }
+
+  // Assign marker to each earthquake
+  function onEachQuakeLayer (feature, latlng) {
+    return new L.circle(latlng, {
+      radius: getRadius(feature.properties.mag),
+      fillColor: getColor(feature.properties.mag),
+      fillOpacity: 0.8,
+      stroke: false,
+    });
+  }
+
+  // Function to run once to render each feature in tectonic plates data
+  // Give each tectonic plates a popup describing the name of the plate
+  function onEachPlateLayer(feature, layer) {
+    layer.bindPopup("<h4>" + feature.properties.Name + "</h4>");
+  }
+
+  // Create a GeoJSON layer containing the features array on the earthquakeData & plateData object
+  // Run the onEachFeature function once to loop through data in the array
+  var earthquakes = L.geoJSON(earthquakeData, {
+    onEachFeature: onEachEarthquake,
+    pointToLayer: onEachQuakeLayer
+  });
+
+  var plates = L.geoJSON(plateData, {
+    onEachFeature: onEachPlateLayer,
+    color: "goldenrod"
+    });
+
+  // Send our earthquakes & plates layer to the createMap function
+  createMap(earthquakes, plates);
+}
+
+// Function to create map
+function createMap(earthquakes, plates) {
+
+  // Define satellite, grayscale & outdoor layers
+  var satellitemap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v9/tiles/256/{z}/{x}/{y}?access_token={accessToken}", {
+    attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> Quan SHUANG, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
+    maxZoom: 18,
+    id: "mapbox.satellite",
+    accessToken: API_KEY
+  });
+
+  var graymap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/light-v9/tiles/256/{z}/{x}/{y}?access_token={accessToken}", {
+    attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> Quan SHUANG, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
+    maxZoom: 18,
+    id: "mapbox.gray",
+    accessToken: API_KEY
+  });
+
+  var outdoormap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/outdoors-v9/tiles/256/{z}/{x}/{y}?access_token={accessToken}", {
+    attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> Quan SHUANG, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
+    maxZoom: 18,
+    id: "mapbox.outdoor",
+    accessToken: API_KEY
+  });
+
+  // Define baseMaps object to hold our base layers
+  var baseMaps = {
+    "Satellite": satellitemap,
+    "Grayscale": graymap,
+    "Outdoors": outdoormap
+  };
+
+  // Create overlayMaps object to hold our overlay map layer
+  var overlayMaps = {
+    "Earthquakes": earthquakes,
+    "Fault Lines": plates
+  };
+
+  // Create our map, giving it the satellitemap, earthquakes & plates layers to display on load
+  var myMap = L.map("map", {
+    center: [43.6529, -79.3849],
+    zoom: 2.5,
+    layers: [satellitemap, earthquakes, plates]
+  });
+
+  // Create a layer control to enable toggle among our baseMaps and overlayMaps
+  // Add the layer control to the map
+  L.control.layers(baseMaps, overlayMaps, {
+    collapsed: false
+  }).addTo(myMap);
+
+
+  // Adding legend
+  var legend = L.control({position: 'bottomright'});
+
+  legend.onAdd = function (map) {
+
+      var div = L.DomUtil.create('div', 'info legend'),
+        grades = [0, 1, 2, 3, 4, 5, 6],
+        labels = [];
+
+      // loop through magnitude intervals and generate a label with a colored square for each interval
+      for (var i = 0; i < grades.length; i++) {
+          div.innerHTML +=
+              '<i style="background:' + getColor(grades[i] + 1) + '"></i> ' +
+              grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+      }
+
+      return div;
+  };
+
+  legend.addTo(myMap);
+}
